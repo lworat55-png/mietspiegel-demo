@@ -1,56 +1,46 @@
-import streamlit as st # Das Werkzeug für die Webseite
-from openai import OpenAI # Die Verbindung zu OpenAI
-from docx import Document # Werkzeug zum Erstellen von Word-Dokumenten
-import io # Hilfsmittel für den Dateiversand
+import streamlit as st
+import google.generativeai as genai # Jetzt für Google Gemini
+from docx import Document
+import io
 
-# 1. SETUP: Wir holen uns die geheimen Daten (Prompt & API-Key) aus dem Tresor
-# Diese Daten werden NICHT im Code stehen, sondern später in den Web-Einstellungen hinterlegt.
-api_key = st.secrets["OPENAI_API_KEY"]
+# 1. SETUP: Wir holen den Gemini Key und den Prompt aus den Secrets
+gemini_key = st.secrets["GEMINI_API_KEY"]
 geheimer_system_prompt = st.secrets["SYSTEM_PROMPT"]
 
-client = OpenAI(api_key=api_key)
+# Gemini konfigurieren
+genai.configure(api_key=gemini_key)
+model = genai.GenerativeModel('gemini-1.5-pro') # Das leistungsstarke Modell
 
-# 2. DAS INTERFACE: Was der Anwalt auf der Webseite sieht
-st.set_page_config(page_title="KI-Mietanalyst Demo", layout="centered")
-st.title("⚖️ KI-Mietwert-Analyst")
-st.info("Demo-Version für Anwaltskanzleien: Fallprüfung & Schriftsatz-Entwurf")
+st.set_page_config(page_title="KI-Mietanalyst (Gemini Demo)", layout="centered")
+st.title("⚖️ KI-Mietwert-Analyst (Powered by Gemini)")
 
-# Eingabefeld für den Sachverhalt
-user_input = st.text_area("Geben Sie hier die Falldaten ein (z.B. Eckdaten Mietvertrag & Mietspiegel-Werte):", height=200)
+user_input = st.text_area("Falldaten hier einfügen:", height=200)
 
-# 3. DIE LOGIK: Was passiert beim Klick auf den Button?
 if st.button("Analyse & Dokument generieren"):
     if not user_input:
-        st.warning("Bitte geben Sie zuerst Daten ein.")
+        st.warning("Bitte Daten eingeben.")
     else:
-        with st.spinner("KI analysiert den Fall und erstellt das Dokument..."):
-            # Hier schicken wir die Daten an OpenAI, inkl. deinem geheimen Prompt
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": geheimer_system_prompt},
-                    {"role": "user", "content": user_input}
-                ]
-            )
+        with st.spinner("Gemini analysiert..."):
+            # Wir kombinieren Prompt und User-Input für Gemini
+            full_prompt = f"{geheimer_system_prompt}\n\nHIER SIND DIE FALLDATEN:\n{user_input}"
+            response = model.generate_content(full_prompt)
             
-            ergebnis_text = response.choices[0].message.content
+            ergebnis_text = response.text
             
-            # Ergebnis auf der Webseite anzeigen
             st.subheader("Analyse-Ergebnis")
             st.markdown(ergebnis_text)
             
-            # 4. DOKUMENT-ERSTELLUNG: Wir packen den Text in eine Word-Datei
+            # Word-Dokument erstellen (bleibt gleich)
             doc = Document()
             doc.add_heading('Analyse & Schriftsatz-Entwurf', 0)
             doc.add_paragraph(ergebnis_text)
             
-            # Datei im Speicher "auffangen" für den Download
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
             
             st.download_button(
-                label="📄 Dokument als Word-Datei herunterladen",
+                label="📄 Word-Datei herunterladen",
                 data=buffer,
                 file_name="Mietwert_Analyse.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
